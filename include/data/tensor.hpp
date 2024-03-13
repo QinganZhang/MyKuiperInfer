@@ -149,7 +149,7 @@ public:
 
     /**
      * 填充张量
-     * @param pads 填充张量的尺寸
+     * @param pads 填充张量的尺寸，注意通道数量不变，只是单个通道上下左右各自都padding的长度，因此pads.size() == 4
      * @param padding_value 填充张量
      */
     void Padding(const std::vector<uint32_t> &pads, float padding_value);
@@ -190,6 +190,7 @@ public:
 
     /**
      * 展开张量
+     * @param row_major default cols major in armadillo
      */
     void Flatten(bool row_major = false);
 
@@ -213,7 +214,7 @@ public:
 
 private:
     void ReView(const std::vector<uint32_t> &shapes);
-    std::vector<uint32_t> raw_shapes_; //< 张量数据的实际尺寸大小
+    std::vector<uint32_t> raw_shapes_; ///< 张量数据的实际尺寸大小
     arma::fcube data_;                 ///< 张量数据
 };
 

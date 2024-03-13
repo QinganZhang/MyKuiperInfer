@@ -298,7 +298,7 @@ namespace kuiper_infer
             }
             this->ReView(target_shapes);
         }
-        else
+        else // col_major
         {
             if (shapes.size() == 3)
             {
@@ -356,6 +356,8 @@ namespace kuiper_infer
         return this->data_.memptr();
     }
 
+
+
     bool TensorIsSame(const std::shared_ptr<Tensor<float>> &a,
                       const std::shared_ptr<Tensor<float>> &b)
     {
@@ -379,7 +381,7 @@ namespace kuiper_infer
             CHECK(tensor1->shapes() == output_tensor->shapes());
             output_tensor->set_data(tensor1->data() + tensor2->data());
         }
-        else
+        else // not in the same shape
         {
             CHECK(tensor1->channels() == tensor2->channels())
                 << "Tensors shape are not adapting";
@@ -400,7 +402,7 @@ namespace kuiper_infer
         if (tensor1->shapes() == tensor2->shapes())
         {
             CHECK(tensor1->shapes() == output_tensor->shapes());
-            output_tensor->set_data(tensor1->data() % tensor2->data());
+            output_tensor->set_data(tensor1->data() % tensor2->data()); // overwrite % 
         }
         else
         {
@@ -470,8 +472,7 @@ namespace kuiper_infer
         return std::make_shared<Tensor<float>>(channels, rows, cols);
     }
 
-    std::shared_ptr<Tensor<float>> TensorCreate(
-        const std::vector<uint32_t> &shapes)
+    std::shared_ptr<Tensor<float>> TensorCreate(const std::vector<uint32_t> &shapes)
     {
         CHECK(shapes.size() == 3);
         return TensorCreate(shapes.at(0), shapes.at(1), shapes.at(2));
@@ -558,4 +559,5 @@ namespace kuiper_infer
             }
         }
     }
+    
 } // namespace kuiper_infer
