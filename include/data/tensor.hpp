@@ -1,300 +1,338 @@
-/**@file tensor.hpp
- * @brief 用于存放多维数据的数据结构
+#ifndef KUIPER_INFER_DATA_BLOB_HPP_
+#define KUIPER_INFER_DATA_BLOB_HPP_
+
+#include <glog/logging.h>
+#include <armadillo>
+#include <memory>
+#include <numeric>
+#include <vector>
+
+/**
+ * @file tensor.hpp
+ * @brief
  *
  */
 
-#ifndef KUIPER_INFER_DATA_BLOB_HPP_
-#define KUIPER_INFER_DATA_BLOB_HPP_
-#include <memory>
-#include <vector>
-#include "armadillo"
+namespace kuiper_infer {
 
-namespace kuiper_infer
-{
-template <typename T> 
-class Tensor {};
-
-template <> // 模板偏特化
-class Tensor<uint8_t> {};
-
-template <>
-class Tensor<float>
-{
+template <typename T>
+class Tensor {
 public:
-    explicit Tensor() = default;
+  explicit Tensor(T* raw_ptr, uint32_t size);
 
-    /**
-     * 创建张量
-     * @param channels 张量的通道数
-     * @param rows 张量的行数
-     * @param cols 张量的列数
-     */
-    explicit Tensor(uint32_t channels, uint32_t rows, uint32_t cols);
+  explicit Tensor(T* raw_ptr, uint32_t rows, uint32_t cols);
 
-    explicit Tensor(const std::vector<uint32_t> &shapes);
+  explicit Tensor(T* raw_ptr, uint32_t channels, uint32_t rows, uint32_t cols);
 
-    Tensor(const Tensor &tensor);
+  /**
+   * @brief Construct a new empty Tensor
+   */
+  explicit Tensor() = default;
 
-    Tensor(Tensor &&tensor) noexcept;
+  /**
+   * @brief Construct a 3D Tensor
+   *
+   * @param channels Number of channels
+   * @param rows Number of rows
+   * @param cols Number of columns
+   */
+  explicit Tensor(uint32_t channels, uint32_t rows, uint32_t cols);
 
-    Tensor<float> &operator=(Tensor &&tensor) noexcept;
+  /**
+   * @brief Construct a 1D Tensor
+   *
+   * @param size Vector size
+   */
+  explicit Tensor(uint32_t size);
 
-    Tensor<float> &operator=(const Tensor &tensor);
+  /**
+   * @brief Construct a 2D matrix Tensor
+   *
+   * @param rows Number of rows
+   * @param cols Number of columns
+   */
+  explicit Tensor(uint32_t rows, uint32_t cols);
 
-    /**
-     * 返回张量的行数
-     * @return 张量的行数
-     */
-    uint32_t rows() const;
+  /**
+   * @brief Construct Tensor with shape
+   *
+   * @param shapes Tensor dimensions
+   */
+  explicit Tensor(const std::vector<uint32_t>& shapes);
 
-    /**
-     * 返回张量的列数
-     * @return 张量的列数
-     */
-    uint32_t cols() const;
+  /**
+   * @brief Gets number of rows
+   *
+   * @return Number of rows
+   */
+  uint32_t rows() const;
 
-    /**
-     * 返回张量的通道数
-     * @return 张量的通道数
-     */
-    uint32_t channels() const;
+  /**
+   * @brief Gets number of columns
+   *
+   * @return Number of columns
+   */
+  uint32_t cols() const;
 
-    /**
-     * 返回张量中元素的数量
-     * @return 张量的元素数量
-     */
-    uint32_t size() const;
+  /**
+   * @brief Gets number of channels
+   *
+   * @return Number of channels
+   */
+  uint32_t channels() const;
 
-    /**
-     * 设置张量中的具体数据
-     * @param data 数据
-     */
-    void set_data(const arma::fcube &data);
+  /**
+   * @brief Gets total number of elements
+   *
+   * @return Total number of elements
+   */
+  size_t size() const;
 
-    /**
-     * 返回张量是否为空
-     * @return 张量是否为空
-     */
-    bool empty() const;
+  size_t plane_size() const;
 
-    /**
-     * 返回张量中offset位置的元素
-     * @param offset 需要访问的位置
-     * @return offset位置的元素
-     */
-    float index(uint32_t offset) const;
+  /**
+   * @brief Sets the tensor data
+   *
+   * @param data Data to set
+   */
+  void set_data(const arma::Cube<T>& data);
 
-    /**
-     * 返回张量中offset位置的元素
-     * @param offset 需要访问的位置
-     * @return offset位置的元素
-     */
-    float &index(uint32_t offset);
+  /**
+   * @brief Checks if tensor is empty
+   *
+   * @return True if empty, false otherwise
+   */
+  bool empty() const;
 
-    /**
-     * 张量的尺寸大小
-     * @return 张量的尺寸大小
-     */
-    std::vector<uint32_t> shapes() const;
+  /**
+   * @brief Gets element reference at offset
+   *
+   * @param offset Element offset
+   * @return Element reference
+   */
+  T& index(uint32_t offset);
 
-    /**
-     * 张量的实际尺寸大小
-     * @return 张量的实际尺寸大小
-     */
-    const std::vector<uint32_t> &raw_shapes() const;
+  /**
+   * @brief Gets element at offset
+   *
+   * @param offset Element offset
+   * @return Element value
+   */
+  const T index(uint32_t offset) const;
 
-    /**
-     * 返回张量中的数据
-     * @return 张量中的数据
-     */
-    arma::fcube &data();
+  /**
+   * @brief Gets tensor shape
+   *
+   * @return Tensor dimensions
+   */
+  std::vector<uint32_t> shapes() const;
 
-    /**
-     * 返回张量中的数据
-     * @return 张量中的数据
-     */
-    const arma::fcube &data() const;
+  /**
+   * @brief Gets raw tensor shape
+   *
+   * @return Raw tensor dimensions
+   */
+  const std::vector<uint32_t>& raw_shapes() const;
 
-    /**
-     * 返回张量第channel通道中的数据
-     * @param channel 需要返回的通道
-     * @return 返回的通道
-     */
-    arma::fmat &slice(uint32_t channel);
+  /**
+   * @brief Gets tensor data
+   *
+   * @return Tensor data
+   */
+  arma::Cube<T>& data();
 
-    /**
-     * 返回张量第channel通道中的数据
-     * @param channel 需要返回的通道
-     * @return 返回的通道
-     */
-    const arma::fmat &slice(uint32_t channel) const;
+  /**
+   * @brief Gets tensor data (const)
+   *
+   * @return Tensor data
+   */
+  const arma::Cube<T>& data() const;
 
-    /**
-     * 返回特定位置的元素
-     * @param channel 通道
-     * @param row 行数
-     * @param col 列数
-     * @return 特定位置的元素
-     */
-    float at(uint32_t channel, uint32_t row, uint32_t col) const;
+  /**
+   * @brief Gets channel matrix
+   *
+   * @param channel Channel index
+   * @return Channel matrix
+   */
+  arma::Mat<T>& slice(uint32_t channel);
 
-    /**
-     * 返回特定位置的元素
-     * @param channel 通道
-     * @param row 行数
-     * @param col 列数
-     * @return 特定位置的元素
-     */
-    float &at(uint32_t channel, uint32_t row, uint32_t col);
+  /**
+   * @brief Gets channel matrix (const)
+   *
+   * @param channel Channel index
+   * @return Channel matrix
+   */
+  const arma::Mat<T>& slice(uint32_t channel) const;
 
-    /**
-     * 填充张量
-     * @param pads 填充张量的尺寸，注意通道数量不变，只是单个通道上下左右各自都padding的长度，因此pads.size() == 4
-     * @param padding_value 填充张量
-     */
-    void Padding(const std::vector<uint32_t> &pads, float padding_value);
+  /**
+   * @brief Gets element at location
+   *
+   * @param channel Channel
+   * @param row Row index
+   * @param col Column index
+   * @return Element at location
+   */
+  const T at(uint32_t channel, uint32_t row, uint32_t col) const;
 
-    /**
-     * 使用value值去初始化向量
-     * @param value
-     */
-    void Fill(float value);
+  /**
+   * @brief Gets element reference at location
+   *
+   * @param channel Channel
+   * @param row Row index
+   * @param col Column index
+   * @return Element reference
+   */
+  T& at(uint32_t channel, uint32_t row, uint32_t col);
 
-    /**
-     * 使用values中的数据初始化张量
-     * @param values 用来初始化张量的数据
-     */
-    void Fill(const std::vector<float> &values);
+  /**
+   * @brief Pads the tensor
+   *
+   * @param pads Padding amount for dimensions
+   * @param padding_value Padding value
+   */
+  void Padding(const std::vector<uint32_t>& pads, T padding_value);
 
-    /**
-     * 以常量1初始化张量
-     */
-    void Ones();
+  /**
+   * @brief Fills tensor with value
+   *
+   * @param value Fill value
+   */
+  void Fill(T value);
 
-    /**
-     * 以随机值初始化张量
-     */
-    void Rand();
+  /**
+   * @brief Fills tensor with vector data
+   *
+   * @param values Data to fill
+   * @param row_major Fill by row-major order
+   */
+  void Fill(const std::vector<T>& values, bool row_major = true);
 
-    /**
-     * 打印张量
-     */
-    void Show();
+  /**
+   * @brief Gets tensor data as vector
+   *
+   * @param row_major Row-major or column-major order
+   * @return Tensor data
+   */
+  std::vector<T> values(bool row_major = true);
 
-    /**
-     * 张量的实际尺寸大小的Reshape pytorch兼容
-     * @param shapes 张量的实际尺寸大小
-     * @param row_major 根据行主序还是列主序进行reshape
-     */
-    void Reshape(const std::vector<uint32_t> &shapes, bool row_major = false);
+  /**
+   * @brief Initializes with ones
+   */
+  void Ones();
 
-    /**
-     * 展开张量
-     * @param row_major default cols major in armadillo
-     */
-    void Flatten(bool row_major = false);
+  /**
+   * @brief Initializes with normal distribution
+   *
+   * @param mean Mean value
+   * @param var Variance
+   */
+  void RandN(T mean = 0, T var = 1);
 
-    /**
-     * 对张量中的元素进行过滤
-     * @param filter 过滤函数
-     */
-    void Transform(const std::function<float(float)> &filter);
+  /**
+   * @brief Initializes with uniform distribution
+   *
+   * @param min Minimum value
+   * @param max Maximum value
+   */
+  void RandU(T min = 0, T max = 1);
 
-    /**
-     * 返回一个深拷贝后的张量
-     * @return 新的张量
-     */
-    std::shared_ptr<Tensor> Clone();
+  /**
+   * @brief Prints tensor
+   */
+  void Show();
 
-    /**
-     * 返回数据的原始指针
-     * @return 返回数据的原始指针
-     */
-    const float *raw_ptr() const;
+  /**
+   * @brief Reshape tensor
+   *
+   * @param shapes New shape
+   * @param row_major Row-major or column-major
+   */
+  void Reshape(const std::vector<uint32_t>& shapes, bool row_major = false);
+
+  /**
+   * @brief Flattens the tensor
+   *
+   * @param row_major Row-major or column-major
+   */
+  void Flatten(bool row_major = false);
+
+  /**
+   * @brief Applies element-wise transform
+   *
+   * @param filter Transform function
+   */
+  void Transform(const std::function<T(T)>& filter);
+
+  /**
+   * @brief Gets raw data pointer
+   *
+   * @return Raw data pointer
+   */
+  T* raw_ptr();
+
+  /**
+   * @brief Gets raw data pointer
+   *
+   * @return Raw data pointer
+   */
+  const T* raw_ptr() const;
+
+  /**
+   * @brief Gets raw data pointer with offset
+   *
+   * @param offset Offset
+   * @return Raw pointer + offset
+   */
+  T* raw_ptr(size_t offset);
+
+  /**
+   * @brief Gets raw data pointer with offset
+   *
+   * @param offset Offset
+   * @return Raw pointer + offset
+   */
+  const T* raw_ptr(size_t offset) const;
+
+  /**
+   * @brief Gets matrix raw pointer
+   *
+   * @param index Matrix index
+   * @return Raw pointer to matrix
+   */
+  T* matrix_raw_ptr(uint32_t index);
+
+  /**
+   * @brief Gets matrix raw pointer
+   *
+   * @param index Matrix index
+   * @return Raw pointer to matrix
+   */
+  const T* matrix_raw_ptr(uint32_t index) const;
 
 private:
-    void ReView(const std::vector<uint32_t> &shapes);
-    std::vector<uint32_t> raw_shapes_; ///< 张量数据的实际尺寸大小
-    arma::fcube data_;                 ///< 张量数据
-};
+  /**
+   * @brief Checks tensor shape
+   *
+   * @param shapes Tensor shape
+   */
+  void Review(const std::vector<uint32_t>& shapes);
+
+  /// Raw tensor dimensions
+  std::vector<uint32_t> raw_shapes_;
+
+  /// Tensor data
+  arma::Cube<T> data_;
+  };
+
+template <typename T = float>
+using tensor_sptr = std::shared_ptr<Tensor<T>>;
 
 using f_tensor = Tensor<float>;
 using f_tensor_sptr = std::shared_ptr<Tensor<float>>;
 
-std::tuple<f_tensor_sptr, f_tensor_sptr> TensorBroadcast(
-    const f_tensor_sptr &s1, const f_tensor_sptr &s2);
+using u8_tensor = Tensor<uint8_t>;
+using u8_tensor_sptr = std::shared_ptr<Tensor<uint8_t>>;
 
-std::shared_ptr<Tensor<float>> TensorPadding(
-    const std::shared_ptr<Tensor<float>> &tensor,
-    const std::vector<uint32_t> &pads, float padding_value);
+}  // namespace kuiper_infer
 
-/**
- * 比较tensor的值是否相同
- * @param a 输入张量1
- * @param b 输入张量2
- * @return 比较结果
- */
-bool TensorIsSame(const std::shared_ptr<Tensor<float>> &a,
-                    const std::shared_ptr<Tensor<float>> &b);
-
-/**
- * 张量相加
- * @param tensor1 输入张量1
- * @param tensor2 输入张量2
- * @return 张量相加的结果
- */
-std::shared_ptr<Tensor<float>> TensorElementAdd(
-    const std::shared_ptr<Tensor<float>> &tensor1,
-    const std::shared_ptr<Tensor<float>> &tensor2);
-
-/**
- * 张量相加
- * @param tensor1 输入张量1
- * @param tensor2 输入张量2
- * @param output_tensor 输出张量
- */
-void TensorElementAdd(const std::shared_ptr<Tensor<float>> &tensor1,
-                        const std::shared_ptr<Tensor<float>> &tensor2,
-                        const std::shared_ptr<Tensor<float>> &output_tensor);
-
-/**
- * 矩阵点乘
- * @param tensor1 输入张量1
- * @param tensor2 输入张量2
- * @param output_tensor 输出张量
- */
-void TensorElementMultiply(const std::shared_ptr<Tensor<float>> &tensor1,
-                            const std::shared_ptr<Tensor<float>> &tensor2,
-                            const std::shared_ptr<Tensor<float>> &output_tensor);
-
-/**
- * 张量相乘
- * @param tensor1 输入张量1
- * @param tensor2 输入张量2
- * @return 张量相乘的结果
- */
-std::shared_ptr<Tensor<float>> TensorElementMultiply(
-    const std::shared_ptr<Tensor<float>> &tensor1,
-    const std::shared_ptr<Tensor<float>> &tensor2);
-
-/**
- * 创建一个张量
- * @param channels 通道数量
- * @param rows 行数
- * @param cols 列数
- * @return 创建后的张量
- */
-std::shared_ptr<Tensor<float>> TensorCreate(uint32_t channels, uint32_t rows,
-                                            uint32_t cols);
-
-/**
- * 创建一个张量
- * @param shapes 张量的形状
- * @return 创建后的张量
- */
-std::shared_ptr<Tensor<float>> TensorCreate(
-    const std::vector<uint32_t> &shapes);
-
-} // namespace kuiper_infer
-
-#endif // KUIPER_INFER_DATA_BLOB_HPP_
+#endif  // KUIPER_INFER_DATA_BLOB_HPP_
