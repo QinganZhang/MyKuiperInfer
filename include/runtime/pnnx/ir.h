@@ -132,7 +132,7 @@ public:
     void remove_consumer(const Operator* c);
 
     Operator* producer;  /// 产生这个Operand的Operator，即该Operand是producer的输出
-    std::vector<Operator*> consumers; /// 使用这个Operand的算子，即该Operand是consumer的输出
+    std::vector<Operator*> consumers; /// 使用这个Operand的节点，即该Operand是consumer的输出
 
     // 0=null 1=f32 2=f64 3=f16 4=i32 5=i64 6=i16 7=i8 8=u8 9=bool 10=cp64 11=cp128 12=cp32
     int type;
@@ -148,8 +148,8 @@ public:
 class Operator
 {
 public:
-    std::vector<Operand*> inputs;  /// the input operand for this operator，该算子需要的输入的操作数
-    std::vector<Operand*> outputs; /// the output operand for this operator，该算子计算得到的输出的操作数
+    std::vector<Operand*> inputs;  /// the input operand for this operator，该节点需要的输入的操作数
+    std::vector<Operand*> outputs; /// the output operand for this operator，该节点计算得到的输出的操作数
 
     // keep std::string typed member the last for cross cxxabi compatibility
     std::string type;

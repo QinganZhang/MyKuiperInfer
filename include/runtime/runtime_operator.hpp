@@ -33,29 +33,32 @@ struct RuntimeOperatorBase {
     /// Whether this operator has run in current execution
     bool has_forward = false;
 
-    /// Name of the operator，全局唯一，比如Conv_1
+    /// Name of the operator,全局唯一,比如Conv_1
     std::string name;
 
     /// Type of the operator, such as Convolution
     std::string type;
 
-    /// Layer for this operator，负责完成具体计算
+    /// Layer for this operator,负责完成具体计算
     std::shared_ptr<Layer<T>> layer;
 
-    /// Names of output operators
+    /// Names of output operators, 
     std::vector<std::string> output_names;
 
-    /// Output operand
-    std::shared_ptr<RuntimeOperandBase<T>> output_operands;
+    /// Output operand, 注意只有一个输出operand
+    std::shared_ptr<RuntimeOperandBase<T>> output_operand;
 
-    /// Output operators mapped by output name
-    std::map<std::string, std::shared_ptr<RuntimeOperatorBase<T>>> output_operators;
+    /// Output operators mapped by output name, 当前节点的后继节点的按名访问
+    std::map<std::string, std::shared_ptr<RuntimeOperatorBase<T>>> output_operators_map;
 
     /// Input operands in sequence
     std::vector<std::shared_ptr<RuntimeOperandBase<T>>> input_operands_seq;
 
-    /// Input operands mapped by provider name
-    std::map<std::string, std::shared_ptr<RuntimeOperandBase<T>>> input_operands;
+    /**
+     * @brief Input operands mapped by provider name
+     * <上一个节点的名字，当前节点的输入Operand>
+    */
+    std::map<std::string, std::shared_ptr<RuntimeOperandBase<T>>> input_operands_map;
 
     /// Operator parameters, such kernel_size, stride for conv
     std::map<std::string, std::shared_ptr<RuntimeParameter>> params;

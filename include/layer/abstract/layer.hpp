@@ -10,6 +10,10 @@
 #include "status_code.hpp"
 
 namespace kuiper_infer {
+
+/**
+ * @brief Layer就是算子
+*/
 template <typename T>
 class Layer;
 
@@ -26,7 +30,7 @@ class Layer<int8_t> {};
  */
 template <>
 class Layer<float> {
- public:
+public:
   explicit Layer(std::string layer_name) : layer_name_(std::move(layer_name)) {}
 
   /**
@@ -38,7 +42,7 @@ class Layer<float> {
    *
    * The inputs and outputs are based on the connections in the runtime
    * graph. This method implements the core inference logic of the layer.
-   *
+   * 准备输入和输出数据，并使用这些数据调用每个派生类算子中各自的实现的计算过程
    * @return Status code indicating success or failure
    */
   virtual StatusCode Forward();
@@ -58,7 +62,7 @@ class Layer<float> {
    * @return Status code
    */
   virtual StatusCode Forward(const std::vector<std::shared_ptr<Tensor<float>>>& inputs,
-                             std::vector<std::shared_ptr<Tensor<float>>>& outputs);
+    std::vector<std::shared_ptr<Tensor<float>>>& outputs);
 
   /**
    * @brief Gets layer weights
@@ -126,8 +130,15 @@ class Layer<float> {
    */
   void set_runtime_operator(const std::shared_ptr<RuntimeOperator>& runtime_operator);
 
- protected:
+protected:
+  /**
+   * @brief 算子名称
+  */
   std::string layer_name_;
+
+  /**
+   * @brief 与该算子对应的节点
+  */
   std::weak_ptr<RuntimeOperator> runtime_operator_;
 };
 }  // namespace kuiper_infer

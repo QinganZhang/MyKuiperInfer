@@ -61,12 +61,12 @@ struct RuntimeAttribute {
     /**
      * @brief clear weight_data, and set weight_data to empty
     */
-    void clear(){
-        if(!this->weight_data.empty()){
-            std::vector<char> tmp = std::vector<char>();
-            this->weight_data = tmp;
-        }
-    }
+    // void clear(){
+    //     if(!this->weight_data.empty()){
+    //         std::vector<char> tmp = std::vector<char>();
+    //         this->weight_data = tmp;
+    //     }
+    // }
 };
 
 template <class T>

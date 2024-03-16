@@ -24,11 +24,12 @@ const std::string& RuntimeGraph::bin_path() const { return this->bin_path_; }
 static bool IsQuantizeOp(const pnnx::Operator* op) { return false; }
 
 /**
- * @brief 初始化结果：对于每个算子，将PNNX算子的attribute和parameter复制（其实是移动）到KuiperInfer的算子中
- * 将KuiperInfer算子的输入输出operand都创建为与原来PNNX算子输入输出相同大小
+ * @brief 根据PNNX中的节点，构建相同的KuiperInfer节点
+ * @details
+ * 初始化结果：对于每个节点，将PNNX节点的attribute和parameter复制（其实是移动）到KuiperInfer的节点中
+ * 将KuiperInfer节点的输入输出operand都创建为与原来PNNX节点输入输出相同大小
 */
-bool RuntimeGraph::Init() 
-{
+bool RuntimeGraph::Init() {
     if (this->bin_path_.empty() || this->param_path_.empty()) {
         LOG(ERROR) << "The bin path or param path is empty";
         return false;
@@ -56,20 +57,21 @@ bool RuntimeGraph::Init()
         else {
             if (!IsQuantizeOp(op)) {
                 std::shared_ptr<RuntimeOperator> runtime_operator = std::make_shared<RuntimeOperator>();
-                // 初始化算子的名称
+                // 初始化节点的名称
                 runtime_operator->name = op->name;
                 runtime_operator->type = op->type;
 
-                // 初始化算子中的input
+                // 初始化节点中的input，即使用op->inputs去初始化runtime_operator中的相关信息，
+                // 但是此时没有为输入输出operand分配空间，在Build时才分配
                 InitGraphOperatorsInput(op->inputs, runtime_operator);
 
                 // 记录输出operand中的名称
                 InitGraphOperatorsOutput(op->outputs, runtime_operator);
 
-                // 初始化算子中的attribute(权重)
+                // 初始化节点中的attribute(权重)
                 InitGraphAttrs(op->attrs, runtime_operator);
 
-                // 初始化算子中的parameter
+                // 初始化节点中的parameter
                 InitGraphParams(op->params, runtime_operator);
                 this->operators_.push_back(runtime_operator);
             }
@@ -102,7 +104,7 @@ void RuntimeGraph::Build() {
     // 构建节点关系
     CreateNodeRelation();
 
-    // 节点拓扑排序
+    // 节点拓扑排序，此时operators_按照逆拓扑顺序进行排列
     ReverseTopoSort();
 
     // 初始化节点的输入和输出空间
@@ -116,6 +118,13 @@ void RuntimeGraph::Build() {
     }
 }
 
+/**
+ * @brief
+ * @details 注意调用过程：
+ * 1. 节点(RuntimeOperator类)中的算子(Layer类)调用算子基类的Forward()方法
+ * 2. 在算子基类中准备输入输出，然后runtime_operator->layer->Forward，先指回节点类，然后通过多态，
+ * 运行时指向特定派生类（特定算子）带参数版本的Forward，真正执行算子
+*/
 template <typename T>
 StatusCode ExecuteLayer(const std::shared_ptr<Layer<T>>& layer, const std::string& op_name,
     const std::string& op_type, bool is_debug) {
@@ -143,6 +152,7 @@ void RuntimeGraph::Forward(bool debug) {
     }
 
     for (const auto& current_op : operators_) {
+        // 节点按照逆拓扑顺序进行执行
         current_op->has_forward = false;
         CHECK_GT(current_op->forward_index, 0);
 
@@ -155,13 +165,15 @@ void RuntimeGraph::Forward(bool debug) {
             << "The layer corresponding to the op " << current_op->name
             << " is empty, indicating that it may not have been created.";
 
+        // current_op->layer->Forward()
         StatusCode status = ExecuteLayer(current_op->layer, current_op->name, current_op->type, debug);
+
         CHECK(status == StatusCode::kSuccess)
             << current_op->layer->layer_name()
             << " layer forward failed, error code: " << int32_t(status);
 
         current_op->has_forward = true;
-        PropagateLayerOutputs(current_op, current_op->output_operands->datas);
+        PropagateLayerOutputs(current_op, current_op->output_operand->datas); // 前面是当前节点，后面是当前节点计算后的输出Tensor
     }
 
     if (debug) {
@@ -183,8 +195,10 @@ std::shared_ptr<Layer<T>> RuntimeGraph::CreateLayer(
 }
 
 /**
- * @brief 对于PNNX格式的输入操作数inputs，对于每个操作数input，
- * 将其属性赋值给KuiperInfer的算子runtime_operator对应的输入Operand
+ * @brief 初始化kuiperInfer节点中的input
+ * @details
+ * 根据PNNX节点op的输入operand inputs，构建kuiperInfer节点runtime_operator的输入operand
+ * 对于PNNX节点的多个输入操作数inputs，对于每个操作数input，创建KuiperInfer的节点runtime_operator，并将input的属性赋值给runtime_operator对应的输入Operand
 */
 template <typename T>
 void RuntimeGraph::InitGraphOperatorsInput(
@@ -200,18 +214,21 @@ void RuntimeGraph::InitGraphOperatorsInput(
         }
 
         std::vector<int32_t> dims;
-        const pnnx::Operator* producer = input->producer; // 当前operand input，之前是producer的输出
+        // 当前的input张量是节点producer的输出
+        const pnnx::Operator* producer = input->producer;
+
 
         for (int32_t dim : input->shape) {
-            dims.push_back(dim); 
+            dims.push_back(dim);
         }
         CHECK(!dims.empty());
 
+        // runtime_operand是当前节点的输入，根据PNNX节点的输入构建而来
         std::shared_ptr<RuntimeOperandBase<T>> runtime_operand =
             std::make_shared<RuntimeOperandBase<T>>();
-        runtime_operand->name = producer->name;
+        runtime_operand->name = producer->name; /// 比如产生这个operand的节点是conv_1，则该输入operand的name也是conv_1
         runtime_operand->shapes = dims;
-        runtime_operator->input_operands.insert({ producer->name, runtime_operand });
+        runtime_operator->input_operands_map.insert({ producer->name, runtime_operand });
         runtime_operator->input_operands_seq.push_back(runtime_operand);
 
         switch (input->type) {
@@ -230,6 +247,12 @@ void RuntimeGraph::InitGraphOperatorsInput(
     }
 }
 
+
+/**
+ * @brief 记录输出operand中的名称
+ * @details
+ * 根据PNNX节点op的输出operand outputs，在kuiperInfer节点runtime_operator的输出operand中记录使用该operand的节点名称，即记录当前节点的后继节点
+*/
 template <typename T>
 void RuntimeGraph::InitGraphOperatorsOutput(
     const std::vector<pnnx::Operand*>& outputs,
@@ -342,41 +365,59 @@ void RuntimeGraph::InitGraphAttrs(const std::map<std::string, pnnx::Attribute>& 
     }
 }
 
+
+// 将当前节点的输出，传播到当前节点后继节点的输入中
 template <typename T>
 void RuntimeGraph::PropagateLayerOutputs(
     const std::shared_ptr<RuntimeOperatorBase<T>>& current_op,
     const std::vector<std::shared_ptr<Tensor<T>>>& layer_output_datas) {
+    
     // For each next operator of current operator
-    for (const auto& [_, output_op] : current_op->output_operators) {
-        // Get next op's input operands corresponding to current op's output
-        const auto& next_input_operands = output_op->input_operands;
-        const auto& next_input_op_iter = next_input_operands.find(current_op->name);
-        if (next_input_op_iter != next_input_operands.end()) {
-            // Get input data spaces for those operands
+    for (const auto& [_, output_op] : current_op->output_operators_map) { // current_op的后继节点
+
+        // 对于当前节点的每一个后继节点output_op，得到其输入Operands的map
+        const auto& next_input_operands_map = output_op->input_operands_map; 
+
+        const auto& next_input_op_iter = next_input_operands_map.find(current_op->name);
+
+        // 在后继节点的输入Operands的map中，找到了当前节点的名字
+        if (next_input_op_iter != next_input_operands_map.end()) {
+
+            // 后继节点的输入Operand中保存的Tensors
             std::vector<tensor_sptr<T>>& next_input_datas = next_input_op_iter->second->datas;
+
             // Copy current op output data to next op input data
             for (uint32_t i = 0; i < next_input_datas.size(); ++i) {
+                // 从当前节点的输出Tensors中，取出指向第i维Tensor的指针
                 const tensor_sptr<T>& layer_output_data = layer_output_datas.at(i);
                 if (next_input_datas.at(i) != nullptr) {
                     CHECK(next_input_datas.at(i)->shapes() == layer_output_data->shapes());
                 }
+                // 检查输入输出形状相同后，将后继节点的对应于当前节点的输入Operand，将对应维度的数据成员（即Tensor）指向当前节点对应的Tensor
+                // 即整个过程没有出现数据复制，只是将后继节点中指向输入Tensor的指针也指向了当前节点输出Tensor
+                // 这与构建时，为输出Operand开辟空间，而不为输入Operand开辟空间相一致
                 next_input_datas.at(i) = layer_output_data;
             }
         }
     }
 }
 
+/**
+ * @brief 构建得到逆拓扑排序，输入节点现在排在第一个，输出节点现在是最后一个
+ * @details 拓扑排序是遍历时后面的节点排在前面
+*/
 void RuntimeGraph::ReverseTopoSort() {
     // 构建拓扑顺序
     for (const auto& op : operators_) {
-        // 根据输入节点构建拓扑排序
+        // 根据输入节点构建拓扑排序，外层for循环防止出现非连通分支
         if (op != nullptr && !op->has_forward) {
             int32_t current_forward_idx = 0;
             this->ReverseTopoSortInternal(op, current_forward_idx);
         }
     }
 
-    // 根据拓扑顺序调整算子的执行顺序
+    // 按照ReverseTopoSort的排序，forward_index小的节点在靠近输出的位置，forward_index大的节点在靠近输入的位置
+    // 根据拓扑顺序调整节点的执行顺序，调整为拓扑逆序顺序，即按照forward_index从大到小的规则进行排序，即靠近输入的节点往前排，靠近输出的节点往后排
     std::sort(operators_.begin(), operators_.end(), [](const auto& op1, const auto& op2) {
         return op1->forward_index > op2->forward_index;
         });
@@ -388,6 +429,12 @@ void RuntimeGraph::ReverseTopoSort() {
     }
 }
 
+/**
+ * @brief 从root_op开始拓扑排序，最终将拓扑顺序记录在每个节点的forward_index属性中
+ * @details forward_index小的节点是后面靠近输出的节点，forward_index大的节点是靠近输入的节点
+ * @param root_op
+ * @param current_forward_idx 记录拓扑排序中节点在访问中的顺序
+*/
 template <typename T>
 void RuntimeGraph::ReverseTopoSortInternal(const std::shared_ptr<RuntimeOperatorBase<T>>& root_op,
     int32_t& current_forward_idx) {
@@ -395,17 +442,19 @@ void RuntimeGraph::ReverseTopoSortInternal(const std::shared_ptr<RuntimeOperator
         LOG(INFO) << "Current operator is nullptr";
         return;
     }
-    if (root_op->input_operands.empty() && !root_op->has_forward) {
+    /// 当前节点的输入操作数是空的（当前节点没有上一个节点），而且还没访问过当前节点
+    if (root_op->input_operands_map.empty() && !root_op->has_forward) {
         this->input_ops_.push_back(root_op);
     }
+    /// 后继节点的名字列表为空，而且还没访问过当前节点
     if (root_op->output_names.empty() && !root_op->has_forward) {
         this->output_ops_.push_back(root_op);
     }
 
     root_op->has_forward = true;
-    const auto& next_ops = root_op->output_operators;
+    const auto& next_ops = root_op->output_operators_map;
     for (const auto& [_, op] : next_ops) {
-        if (op != nullptr && !op->has_forward) {
+        if (op != nullptr && !op->has_forward) { // op是root_op的后继节点
             this->ReverseTopoSortInternal(op, current_forward_idx);
         }
     }
@@ -417,19 +466,28 @@ void RuntimeGraph::ReverseTopoSortInternal(const std::shared_ptr<RuntimeOperator
     current_forward_idx += 1;
 }
 
+/**
+ * @brief 构建节点关系
+ * @details
+ * 首先构建每个节点的output_operators，即每个节点可以根据后继节点的名字找到该后继节点（map{name: 后继节点}）
+ * 然后对于每个节点，构建layer
+*/
 void RuntimeGraph::CreateNodeRelation() {
     // 构建图关系
     for (const auto& current_op : this->operators_) {
-        // 获取当前节点的所有后继节点的names，遍历根据next_op_name从operators_maps_中插入所需要的节点
+        // 对于图中的每个节点，首先获取当前节点的后继节点的names
+        // 然后再遍历所有节点，找到对应的后继节点，将{name: 后继节点}更新到当前节点的output_operators中
         const std::vector<std::string>& output_names = current_op->output_names;
         for (const auto& kOutputName : output_names) {
             for (const auto& output_op : this->operators_) {
                 if (output_op != current_op && output_op->name == kOutputName) {
-                    current_op->output_operators.insert({ kOutputName, output_op });
+                    // output_op 是 当前节点的一个后继节点
+                    current_op->output_operators_map.insert({ kOutputName, output_op });
                 }
             }
         }
-        // 除了输入和输出节点，都创建layer
+
+        // 除了输入和输出节点，对于每个节点，都创建layer
         if (current_op->type != "pnnx.Input" && current_op->type != "pnnx.Output") {
             auto layer = RuntimeGraph::CreateLayer(current_op);
             if (layer) {

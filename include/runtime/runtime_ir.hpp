@@ -254,8 +254,8 @@ private:
     std::unique_ptr<pnnx::Graph> graph_;
 
     GraphState graph_state_ = GraphState::NeedInit;
-    std::vector<std::shared_ptr<RuntimeOperator>> input_ops_;
-    std::vector<std::shared_ptr<RuntimeOperator>> output_ops_;
+    std::vector<std::shared_ptr<RuntimeOperator>> input_ops_; /// 整个图的输入节点，这些节点的input_operands都是空的，直接将计算图的输入作为input_operands
+    std::vector<std::shared_ptr<RuntimeOperator>> output_ops_; /// 整个图的输出节点，这些节点的output_names都是空的，直接其output_operand作为整个计算图的输出
     std::vector<std::shared_ptr<RuntimeOperator>> operators_;
 };
 

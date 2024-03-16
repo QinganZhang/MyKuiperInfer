@@ -32,7 +32,10 @@ struct RuntimeOperandBase {
         : name(std::move(name)), shapes(std::move(shapes)), datas(std::move(datas)), type(type) {
     }
 
-    /// Name of the operand
+    /**
+     * @brief Name of the operand
+     * 比如当前operand是输入operand，则此时name是输出当前operand的节点的name
+    */
     std::string name;
 
     /// Shape of the operand

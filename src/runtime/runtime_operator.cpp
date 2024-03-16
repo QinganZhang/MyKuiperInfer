@@ -6,7 +6,7 @@ namespace kuiper_infer {
 /**
  * @brief use pnnx_operators to init kuiperInfer_operators, 
  *  just convert kuiperInfer_operators's input operands into the counterpart shape of pnnx_operands's input operands
- * 将kuiperInfer_operators中算子的输入操作数init成 pnnx_operators中算子的输入操作数相同的维度，不要求数值相同
+ * 将kuiperInfer_operators中节点的输入操作数init成 pnnx_operators中节点的输入操作数相同的维度，不要求数值相同
 */
 void RuntimeOperatorUtils<float>::InitOperatorInput(
     const std::vector<std::shared_ptr<RuntimeOperator>>& operators) {
@@ -16,12 +16,12 @@ void RuntimeOperatorUtils<float>::InitOperatorInput(
     }
 
     for (const auto& op : operators) {
-        if (op->input_operands.empty()) {
+        if (op->input_operands_map.empty()) {
             continue;
         }
         else {
             const std::map<std::string, std::shared_ptr<RuntimeOperand>>& input_operands_map =
-                op->input_operands;
+                op->input_operands_map;
             // 初始化operator的输入空间
             for (const auto& [_, input_operand] : input_operands_map) { // for each pair{input_name, input_operand}
                 if (!input_operand) {
@@ -104,7 +104,7 @@ static void CheckAndReshapeTensor(f_tensor_sptr& output_tensor,
 /**
  * @brief use pnnx_operators to init kuiperInfer_operators, 
  *  just convert kuiperInfer_operators's output operands into the counterpart shape of pnnx_operands's output operands
- * 将kuiperInfer_operators中算子的输出操作数init成 pnnx_operators中算子的输出操作数相同的维度
+ * 将kuiperInfer_operators中节点的输出操作数init成 pnnx_operators中节点的输出操作数相同的维度
 */
 void RuntimeOperatorUtils<float>::InitOperatorOutput(
     const std::vector<pnnx::Operator*>& pnnx_operators,
@@ -119,24 +119,24 @@ void RuntimeOperatorUtils<float>::InitOperatorOutput(
             LOG(FATAL) << "Only support one node one output yet! Every node shoud have one output operand now";
         }
 
-        pnnx::Operand* operand = operands[0];
+        pnnx::Operand* operand = operands[0]; // pnnx operator 's only output operand
         CHECK(operand != nullptr && !operand->shape.empty()) << "Operand output is null or empty!";
         std::vector<int32_t> operand_shapes;
         std::copy_if(operand->shape.begin(), operand->shape.end(), std::back_inserter(operand_shapes),
             [](int32_t dim) { return dim > 0; });
         const auto& runtime_op = operators[i];
-        const auto& output_tensors = runtime_op->output_operands;
+        const auto& output_tensors = runtime_op->output_operand; // KuiperInfer's only output operand 
         CHECK((operand_shapes.size() == 2 || operand_shapes.size() == 4 || operand_shapes.size() == 3))
             << "Unsupported shape sizes: " << operand_shapes.size();
 
         const int32_t batch = operand_shapes[0];
         CHECK_EQ(operand->type, 1) << "The type of pnnx operand is not float32";
-        if (!output_tensors) {
+        if (!output_tensors) { // output_tensors == nullptr
             std::vector<f_tensor_sptr> output_operand_datas;
             for (uint32_t j = 0; j < batch; ++j) {
                 output_operand_datas.push_back(CreateTensor(operand_shapes));
             }
-            runtime_op->output_operands =
+            runtime_op->output_operand =
                 std::make_shared<RuntimeOperand>(operand->name + "_output", operand_shapes,
                     output_operand_datas, RuntimeDataType::kTypeFloat32);
         }
