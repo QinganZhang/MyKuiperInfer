@@ -322,6 +322,8 @@ private:
 
   /// Tensor data
   arma::Cube<T> data_;
+  
+  T* gpu_data_;
   };
 
 template <typename T = float>

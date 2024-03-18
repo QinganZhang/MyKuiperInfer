@@ -1,3 +1,5 @@
 /.vscode
+/build
+/lib
+/tmp
 /.git
-test.cpp

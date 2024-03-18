@@ -1,0 +1,361 @@
+@startuml KuiperInfer_Structure 
+' PlantUML语法：https://plantuml.com/zh-dark/class-diagram
+
+' 基础数据结构
+class Tensor<T> {
+  - data_ : arma:Cube<T>
+  - raw_shapes_ : std::vector<uint32_t>
+}
+
+class RuntimeAttribute {
+  + weight_data : std::vector<char>
+  + shape: std::vector<int32_t>
+  + type : RuntimeDataType
+}
+class RuntimeParameter {
+  + type : RuntimeParameterType
+}
+
+' 核心数据结构RuntimeOperandBase
+class RuntimeOperandBase<T> {
+  + name : std::string 
+  + shapes : std::vector<int32_t>
+  + datas : std::vector<std::shared_ptr<Tensor<T>>>
+  + type : RuntimeDataType 
+} 
+RuntimeOperandBase o-- Tensor
+
+class RuntimeOperand {}
+RuntimeOperand ..|> RuntimeOperandBase
+note left on link : RuntimeOperandBase<float>
+
+' 核心数据结构RuntimeOperatorBase
+class RuntimeOperatorBase<T> {
+  + forward_index : int32_t
+  + has_forward : bool 
+  + name : std::string
+  + type : std::string
+  + layer : std::shared_ptr<Layer<T>>
+  + output_names : std::vector<std::string>
+  + output_operand : std::shared_ptr<RuntimeOperandBase<T>>
+  + output_operators_map : std::map<std::string, std::shared_ptr<RuntimeOperatorBase<T>>>
+  + input_operands_map: std::map<std::string, std::shared_ptr<RuntimeOperandBase<T>>>
+  + input_operands_seq: std::vector<std::shared_ptr<RuntimeOperandBase<T>>>
+  + params : std::map<std::string, std::shared_ptr<RuntimeParameter>>
+  + attribute : std::map<std::string, std::shared_ptr<RuntimeAttribute>>
+}
+RuntimeOperatorBase o-- RuntimeOperandBase
+RuntimeOperatorBase o-- RuntimeParameter
+RuntimeOperatorBase o-- RuntimeAttribute
+RuntimeOperatorBase <-- Layer
+RuntimeOperatorBase --> Layer
+RuntimeOperator ..|> RuntimeOperatorBase 
+
+'调整布局
+class RuntimeHiddenClass1 {}
+RuntimeOperatorBase -[hidden]-> RuntimeHiddenClass1
+hide RuntimeHiddenClass1
+class RuntimeHiddenClass2 {}
+RuntimeOperatorBase -[hidden]-> RuntimeHiddenClass2
+hide RuntimeHiddenClass2
+class RuntimeHiddenClass3 {} 
+RuntimeOperatorBase -[hidden]-> RuntimeHiddenClass3
+hide RuntimeHiddenClass3
+RuntimeOperandBase - RuntimeHiddenClass1
+RuntimeHiddenClass1 - RuntimeAttribute
+RuntimeAttribute - RuntimeHiddenClass2
+RuntimeHiddenClass2 - RuntimeParameter
+RuntimeParameter - RuntimeHiddenClass3
+RuntimeHiddenClass3 - Layer
+
+
+note left on link : RuntimeOperatorBase<float>
+
+note left of RuntimeOperatorBase::output_names
+  names of output operators, 当前算子的后继算子名称
+end note
+
+note left of RuntimeOperatorBase::output_operand
+  the only one output operand
+end note 
+
+note left of RuntimeOperatorBase::output_operators_map
+  Output operators mapped by output name
+  当前算子的后继算子的按名访问
+end note 
+
+note left of RuntimeOperatorBase::input_operands_map
+   Input operands mapped by provider name
+end note 
+
+note left of RuntimeOperatorBase::input_operands_seq
+  serveral input operands
+end note 
+
+
+' 核心数据结构RuntimeGraph
+class RuntimeGraph {
+  - bin_path_ : std::string
+  - param_path_ : std::string 
+  - graph_ : std::unique_ptr<pnnx::Graph> 
+  - graph_state_ : GraphState 
+  - input_ops_ : std::vector<std::shared_ptr<RuntimeOperator>> 
+  - output_ops_ : std::vector<std::shared_ptr<RuntimeOperator>>
+  - operators_ : std::vector<std::shared_ptr<RuntimeOperator>> 
+  - Init() : bool
+  + Build() : void 
+  + Forward(bool) : void 
+}
+' RuntimeGraph <-- Graph
+RuntimeGraph o-- RuntimeOperator
+
+note left of RuntimeGraph::input_ops_ 
+  整个图的输入节点，这些节点的input_operands_map都是空的
+end note
+
+note left of RuntimeGraph::output_ops_ 
+  整个图的输出节点，这些节点的output_names都是空的
+end note
+
+
+
+' PNNX格式的数据结构
+package PNNX {
+  class Parameter{ 
+    + type : int
+  }
+  class Attribute{
+    + type : int
+    + shape : std::vector<int>
+  }
+  class Operand{
+    + type : int
+    + shape : std::vector<int>
+    + name : std::string
+    + params : std::map<std::string, Parameter>
+    + producer : Operator*
+    + consumers : std::vector<Operator*>
+  }
+  Operand <-- Operator
+  Operand o-- Operator
+
+  note left of Operand::producer 
+    产生该Operand的算子
+  end note
+
+  note left of Operand::consumers
+    使用该Operand的(多个)算子
+  end note
+
+  class Operator { 
+    + type : std::string
+    + name : std::string
+    + input : std::vector<Operand*>
+    + output : std::vector<Operand*>
+    + inputnames : std::vector<std::string>
+    + params : std::map<std::string, Parameter>
+    + attrs : std::map<std::string, Attribute>
+  }
+  Operator o-- Parameter
+  Operator o-- Attribute 
+  Operator o-- Operand
+
+  class Graph {
+    + ops : std::vector<Operator*>
+    + operands : std::vector<Operand*>
+  }
+  note right of Graph : pnnx::Graph
+  Graph o-- Operator
+  Graph o-- Operand 
+  RuntimeGraph <-- Graph
+}
+
+
+' 算子虚基类
+class Layer{
+  + {abstract} Forward() : StatusCode
+  + {abstract} Forward(inputs, outputs) : StatusCode
+  # layer_name_ : std::string
+  # runtime_operator_ : std::weak_ptr<RuntimeOperator>
+}
+note right of Layer::runtime_operator_
+  与该算子对应的节点
+end note 
+
+
+
+' 算子注册类
+class LayerRegister {
+  {field} - CreateRegistry = std::map<std::string, Creator> 
+  {field} - {static} registry_ : CreateRegistry* 
+  {field} - Creator : StatusCode()(const std::shared_ptr<RuntimeOperator>&, std::shared_ptr<Layer<float>>&)
+  + {static} Registry() : CreateRegistry* 
+  + {static} RegisterCreator(const std::string&, const Creator&) : void 
+  + {static} CreateLayer(const std::shared_ptr<RuntimeOperator>&) : std::shared_ptr<Layer<float>>
+  + {static} layer_types() : std::vector<std::string>
+}
+LayerRegister <-- Layer
+
+note left of LayerRegister::registry_ 
+  全局唯一注册表
+end note 
+
+note left of LayerRegister::Creator
+  函数指针，第一个参数指向节点，第二个参数指向一个待创建的算子
+end note 
+
+note left of LayerRegister::Registry()
+  （创建并）返回单例
+end note
+
+note left of LayerRegister::RegisterCreator
+  在全局注册表中添加一个算子的构建方式，即注册一个算子
+end note 
+
+note left of LayerRegister::CreateLayer
+  为传入的节点创建算子
+end note 
+
+note left of LayerRegister::layer_types
+  返回全局注册表中所有的算子类型
+end note 
+
+class LayerRegistererWrapper {
+  + {static} : LayerRegistererWrapper(const LayerRegisterer::Creator&, const std::string&)
+} 
+LayerRegistererWrapper <-- LayerRegister
+
+
+' 无参算子
+class NonParamLayer {}
+NonParamLayer ..|> Layer
+note left on link : Layer<float>
+
+' 有参算子
+class ParamLayer {
+  # weights_ : std::vector<std::shared_ptr<Tensor<float>>>
+  # bias_ : std::vector<std::shared_ptr<Tensor<float>>>
+}
+ParamLayer ..|> Layer
+note left on link : Layer<float>
+
+' 布局调整
+Layer -[hidden]->  NonParamLayer
+class hiddenClass1 {} 
+Layer -[hidden]-> hiddenClass1
+hide hiddenClass1
+class hiddenClass2 {} 
+Layer -[hidden]-> hiddenClass2
+hide hiddenClass2
+Layer -[hidden]-> ParamLayer
+NonParamLayer - hiddenClass1
+hiddenClass1 - hiddenClass2
+hiddenClass2 - ParamLayer
+
+
+'Relu算子
+class ReluLayer extends NonParamLayer {
+  + Forward(inputs, outputs) : StatusCode
+  {static} + CreateInstance(op, layer) : StatusCode
+'  + Forward(const std::vector<std::shared_ptr<Tensor<float>>>&, std::vector<std::shared_ptr<Tensor<float>>>&) : StatusCode
+'  {static} + CreateInstance(const std::shared_ptr<RuntimeOperator>&, std::shared_ptr<Layer<float>>&) : StatusCode
+}
+
+note left of ReluLayer::CreateInstance
+  Relu算子的构建方式
+  （即如何使用节点的信息创建一个算子并返回）
+end note
+
+'Relu算子中用的一些工具函数，就将其打包到entity中
+entity activation {
+  {field} ActivationFunc = std::function<void(f_tensor_sptr, f_tensor_sptr)>
+  ApplySSEActivation(ActivationType) : ActivationFunc
+  ActivationForward(type, inputs, outputs) : StatusCode 
+}
+note right of activation::ApplySSEActivation 
+  实现了若干激活函数的具体执行逻辑
+end note
+activation --> ReluLayer
+ReluLayer -[hidden]-> activation
+
+class MaxPoolingLayer extends NonParamLayer {
+  + Forward(inputs, outputs) : StatusCode
+  {static} + CreateInstance(op, layer) : StatusCode
+'  + Forward(const std::vector<std::shared_ptr<Tensor<float>>>&, std::vector<std::shared_ptr<Tensor<float>>>&) : StatusCode
+'  {static} + CreateInstance(const std::shared_ptr<RuntimeOperator>&, std::shared_ptr<Layer<float>>&) : StatusCode
+  - padding_ : uint32_t 
+  - pooling_size_ : uint32_t 
+  - stride_ : uint32_t 
+}
+
+
+'Conv算子
+class BaseConvolutionLayer extends ParamLayer {
+  + Forward(inputs, outputs) : StatusCode
+  {static} + CreateInstance(op, layer) : StatusCode
+  {abstract} - ComputeOutput(~) : void 
+  {abstract} - ComputeOutputSize(~) : std::pair<uint32_t, uint32_t>
+  # AddBias(~) : void 
+  # 相关属性
+}
+
+class ConvolutionLayer extends BaseConvolutionLayer {
+  - Is1x1KernelNoPadding(~) : bool
+  - InitIm2ColWeight() : void 
+  - ComputeOutput(~) : void 
+  - ComputeOutputSize(~) : std::pair<uint32_t, uint32_t>
+  - ConvGEMMBias(~) : void 
+  - ConvIm2Col(~) : arma::fmat
+}
+
+class DeconvolutionLayer extends BaseConvolutionLayer {
+  - ComputeOutput(~) : void 
+  - ComputeOutputSize(~) : std::pair<uint32_t, uint32_t>
+  - DeconvCol2ImBias(~) : void 
+  - DeconvGEMM(~) : arma::fmat
+}
+
+
+
+'表达式层相关
+class Token {
+  + token_type : TokenType 
+  + start_pos, end_pos : int32_t
+}
+class TokenNode { 
+  + num_index : int32_t 
+  + left, right : std::shared<TokenNode> 
+}
+class ExpressionParser {
+  - tokens_ : std::vector<Token>
+  - token_strs_ : std::vector<std::string>
+  - statement_ : std::string 
+  - Generate_(int32_t&) : std::shared_ptr<TokenNode>
+  + Tokenizer(bool) : void 
+  + Generate() : std::vector<std::shared_ptr<TokenNode>>
+}
+ExpressionParser <-- Token
+ExpressionParser <-- TokenNode 
+
+note left of ExpressionParser::Tokenizer
+  词法解析
+end note 
+
+note left of ExpressionParser::Generate()
+  语法解析，生成语法树
+  最后返回逆波兰表达式
+end note 
+
+
+' 表达式层
+class ExpressionLayer extends NonParamLayer {
+  - statement_ : std::string 
+  - parser_ : std::unique_ptr<ExpressionParser>
+  + Forward(inputs, outputs) : StatusCode
+  {static} + CreateInstance(op, layer) : StatusCode
+  + TokenIsOperator(Token) : bool   
+}
+ExpressionLayer <-- ExpressionParser
+
+
+@enduml

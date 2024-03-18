@@ -33,7 +33,7 @@ struct Token {
     int32_t end_pos = 0;
 
     /**
-     * @brief Construct a new Token
+     * @brief Construct a new Token, 左闭右开[)
      *
      * @param token_type Token type
      * @param start_pos Start position
@@ -48,7 +48,13 @@ struct Token {
  * @brief Node in expression syntax tree
  */
 struct TokenNode {
-    /// Index of input variable
+    /***
+     * @brief Index of input variable
+     * @details 当num_index=x时，表示计算数@(x-1)，
+     * 比如当num_index=1时，表示计算数@0，当num_index=2时，表示计算数@1
+     * 当num_index为负数时，表示当前节点是一个计算节点，比如add，mul
+     * 
+    */
     int32_t num_index = -1;
 
     /// Left child node
@@ -85,7 +91,7 @@ public:
     explicit ExpressionParser(std::string statement) : statement_(std::move(statement)) {}
 
     /**
-     * @brief Performs lexical analysis
+     * @brief Performs lexical analysis 词法分析
      *
      * Breaks the expression into tokens.
      *
@@ -94,9 +100,10 @@ public:
     void Tokenizer(bool retokenize = false);
 
     /**
-     * @brief Performs syntax analysis
+     * @brief Performs syntax analysis 语法分析
      *
-     * Generates a syntax tree from the tokens.
+     * 首先解析词法分析得到的Token数组tokens_，转换成一棵语法树
+     * 然后将语法树转换成逆波兰表达式，并返回
      *
      * @return Vector of root nodes
      */
@@ -117,12 +124,16 @@ public:
     const std::vector<std::string>& token_str_array() const;
 
 private:
+    /**
+     * @brief 从index位置开始解析词法分析得到的tokens_，转换成一棵语法树，并返回
+     * @param index tokens_的下标
+    */
     std::shared_ptr<TokenNode> Generate_(int32_t& index);
 
 private:
-    std::vector<Token> tokens_;
-    std::vector<std::string> token_strs_;
-    std::string statement_;
+    std::vector<Token> tokens_; /// 存放解析得到的Token
+    std::vector<std::string> token_strs_; /// 表达式中tokens_对应的substr
+    std::string statement_; /// input expression 
 };
 }  // namespace kuiper_infer
 

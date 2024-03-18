@@ -101,7 +101,7 @@ void RuntimeGraph::Build() {
         << "Graph status error, current state is " << int32_t(graph_state_);
     LOG_IF(FATAL, this->operators_.empty()) << "Graph operators is empty, may be no init";
 
-    // 构建节点关系
+    // 构建节点关系，为每个节点创建算子
     CreateNodeRelation();
 
     // 节点拓扑排序，此时operators_按照逆拓扑顺序进行排列
@@ -173,6 +173,8 @@ void RuntimeGraph::Forward(bool debug) {
             << " layer forward failed, error code: " << int32_t(status);
 
         current_op->has_forward = true;
+
+        // 将当前节点的输出传播到后继节点的输入中
         PropagateLayerOutputs(current_op, current_op->output_operand->datas); // 前面是当前节点，后面是当前节点计算后的输出Tensor
     }
 

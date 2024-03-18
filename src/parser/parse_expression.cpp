@@ -1,9 +1,9 @@
-#include "parser/parse_expression.hpp"
 #include <glog/logging.h>
 #include <algorithm>
 #include <cctype>
 #include <stack>
 #include <utility>
+#include "parser/parse_expression.hpp"
 
 namespace kuiper_infer {
 
@@ -17,10 +17,12 @@ void ReversePolish(const std::shared_ptr<TokenNode>& root_node,
 }
 
 void ExpressionParser::Tokenizer(bool retokenize) {
+    // retokenize==false, tokens is not empty, then return 
     if (!retokenize && !this->tokens_.empty()) {
         return;
     }
 
+    // 移除空格
     CHECK(!statement_.empty()) << "The input statement is empty!";
     statement_.erase(
         std::remove_if(statement_.begin(), statement_.end(), [](char c) { return std::isspace(c); }),
@@ -106,8 +108,10 @@ std::shared_ptr<TokenNode> ExpressionParser::Generate_(int32_t& index) {
     CHECK(current_token.token_type == TokenType::TokenInputNumber ||
         current_token.token_type == TokenType::TokenAdd ||
         current_token.token_type == TokenType::TokenMul);
+
+
     if (current_token.token_type == TokenType::TokenInputNumber) {
-        uint32_t start_pos = current_token.start_pos + 1;
+        uint32_t start_pos = current_token.start_pos + 1; // +1是因为数字的表示为@num,比如@123
         uint32_t end_pos = current_token.end_pos;
         CHECK(end_pos > start_pos || end_pos <= this->statement_.length())
             << "Current token has a wrong length";
@@ -120,19 +124,23 @@ std::shared_ptr<TokenNode> ExpressionParser::Generate_(int32_t& index) {
         current_token.token_type == TokenType::TokenAdd) {
         std::shared_ptr<TokenNode> current_node = std::make_shared<TokenNode>();
         current_node->num_index = int32_t(current_token.token_type);
-
+        
+        // 举个例子：add ( @1 , @2 ) ，此时index索引的token是add
+        // add或mul的下一个token一定是一个左括号
         index += 1;
         CHECK(index < this->tokens_.size()) << "Missing left bracket!";
         CHECK(this->tokens_.at(index).token_type == TokenType::TokenLeftBracket);
 
         index += 1;
+        // 此时index移动到add或mul的下下个token的位置
         CHECK(index < this->tokens_.size()) << "Missing correspond left token!";
         const auto left_token = this->tokens_.at(index);
 
         if (left_token.token_type == TokenType::TokenInputNumber ||
             left_token.token_type == TokenType::TokenAdd ||
             left_token.token_type == TokenType::TokenMul) {
-            current_node->left = Generate_(index);
+            // 递归调用，如果index是数字，则直接返回，如果index是add或者mul，则创建新的子树并返回
+            current_node->left = Generate_(index); 
         }
         else {
             LOG(FATAL) << "Unknown token type: " << int32_t(left_token.token_type);
@@ -173,7 +181,7 @@ std::vector<std::shared_ptr<TokenNode>> ExpressionParser::Generate() {
     CHECK(root != nullptr);
     CHECK(index == tokens_.size() - 1);
 
-    // 转逆波兰式,之后转移到expression中
+    // 转逆波兰式,之后转移到expression中（即语法树的后序遍历）
     std::vector<std::shared_ptr<TokenNode>> reverse_polish;
     ReversePolish(root, reverse_polish);
 
