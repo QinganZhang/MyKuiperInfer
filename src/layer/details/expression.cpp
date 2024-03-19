@@ -50,7 +50,7 @@ StatusCode ExpressionLayer::Forward(const std::vector<std::shared_ptr<Tensor<flo
 
   CHECK(this->parser_ != nullptr) << "The parser in the expression layer is null!";
   this->parser_->Tokenizer(false);
-  // this->parser_->Generate();
+  // this->parser_->Generate(); // 注意这里不需要
   const auto& tokens = this->parser_->tokens();
   const auto& token_str_array = this->parser_->token_str_array();
   CHECK(!tokens.empty() && !token_str_array.empty())
@@ -58,6 +58,14 @@ StatusCode ExpressionLayer::Forward(const std::vector<std::shared_ptr<Tensor<flo
 
   const uint32_t batch_size = outputs.size();
   std::stack<std::vector<std::shared_ptr<Tensor<float>>>> op_stack;
+
+  /**
+   * 注意这里在计算表达式时，使用的方式不是词法解析->语法解析->生成后缀表达式->使用栈计算
+   * - 首先注意表达式的形式：mul(@1,add(@2,@3))，
+   * - 词法解析后，tokens中的token，是表达式的前缀遍历：mul 1 add 2 3
+   * - 在遍历过程中，逆序遍历，使用栈计算
+   * ref: https://github.com/zjhellofss/KuiperInfer/issues/33#issuecomment-1718600527
+  */
   for (auto iter = tokens.rbegin(); iter != tokens.rend(); ++iter) {
     const auto& current_token = *iter;
     // 如果是数据类型，就将对应分支的input插入到栈中
