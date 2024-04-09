@@ -32,6 +32,8 @@ struct RuntimeOperandBase {
         : name(std::move(name)), shapes(std::move(shapes)), datas(std::move(datas)), type(type) {
     }
 
+    size_t size() const;
+
     /**
      * @brief Name of the operand
      * 比如当前operand是输入operand，则此时name是输出当前operand的节点的name
@@ -47,6 +49,13 @@ struct RuntimeOperandBase {
     /// Data type of the operand
     RuntimeDataType type = RuntimeDataType::kTypeUnknown;
 };
+
+template<typename T>
+size_t RuntimeOperandBase<T>::size() const{
+    if(shape.empty(())) return 0;
+    size_t size = std::accumulate(shapes.begin(), shapes.end(), 1, std::multiplies());
+    return size;
+}
 
 using RuntimeOperand = RuntimeOperandBase<float>;
 

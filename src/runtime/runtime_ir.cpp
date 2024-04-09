@@ -429,6 +429,23 @@ void RuntimeGraph::ReverseTopoSort() {
         op->forward_index = forward_index;
         forward_index += 1;
     }
+
+    for(const auto& op: operators_){
+        const auto& next_ops = op->output_operators_map;
+        int32_t last_forward_index = -1; // 记录当前节点的后续节点中，最后面一个的位置
+        for(const auto& [_, next_op] : next_ops){ // <string, RuntimeOperator*>
+            if(next_op->forward_index >= last_forward_index){
+                last_forward_index = next_op->forward_index;
+            }
+        }
+
+        if(last_forward_index == -1){ // 当前op没有后继节点
+            op->end_time = op->forward_index + 1;
+        }
+        else { // 当前op的最后一个后继节点
+            op->end_time = last_forward_index;
+        }
+    }
 }
 
 /**
